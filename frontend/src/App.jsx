@@ -10,6 +10,8 @@ export default function App() {
   const [error, setError] = useState(null)
   const [searchParams, setSearchParams] = useState(null)
 
+  const API_BASE = import.meta.env.VITE_API_URL || ''
+
   const handleSearch = async ({ city, country, minScore }) => {
     setIsLoading(true)
     setError(null)
@@ -18,7 +20,7 @@ export default function App() {
     setSearchParams({ city, country, minScore })
 
     try {
-      const res = await fetch('/api/scrape', {
+      const res = await fetch(`${API_BASE}/api/scrape`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ city, country, min_score: minScore }),
