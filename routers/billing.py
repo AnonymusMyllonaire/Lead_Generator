@@ -43,6 +43,20 @@ def create_session(request: SessionRequest):
     }
 
 
+@router.post("/api/checkout")
+def create_checkout(request: SessionRequest, http_request: Request):
+    email = _validate_email(request.email)
+    origin = http_request.headers.get("origin")
+    if not origin:
+        raise HTTPException(status_code=400, detail="Missing Origin header")
+    try:
+        url = polar_client.create_checkout(email, embed_origin=origin)
+    except Exception:
+        logging.exception("Failed to create Polar checkout session")
+        raise HTTPException(status_code=502, detail="Could not start checkout")
+    return {"url": url}
+
+
 @router.get("/api/subscription/status")
 def subscription_status(email: str = Depends(get_current_email_required)):
     customer = db.get_customer(email)

@@ -11,5 +11,11 @@ services:
         sync: false
       - key: POLAR_WEBHOOK_SECRET
         sync: false
+      - key: POLAR_ACCESS_TOKEN
+        sync: false
+      - key: POLAR_PRODUCT_ID
+        sync: false
+      - key: POLAR_ENVIRONMENT
+        value: "sandbox"
       - key: DATABASE_PATH
         value: "./data/subscribers.db"

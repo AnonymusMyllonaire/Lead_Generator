@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { openPolarCheckout } from '../lib/polarCheckout'
 
-const CHECKOUT_URL = import.meta.env.VITE_POLAR_CHECKOUT_URL || ''
-
 export default function AccountBar({ session }) {
   const { email, status, subscribed, isLoading, error, login, logout, refreshStatus } = session
   const [inputEmail, setInputEmail] = useState('')
+  const [checkoutError, setCheckoutError] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -17,21 +16,24 @@ export default function AccountBar({ session }) {
     }
   }
 
-  const handleUpgrade = () => {
-    if (!CHECKOUT_URL) return
-    const checkoutHref = `${CHECKOUT_URL}?customer_email=${encodeURIComponent(email)}`
-    openPolarCheckout(checkoutHref, {
-      onSuccess: () => {
-        // The webhook that flips our DB status may land a few seconds after
-        // payment confirms, so poll status a handful of times to catch up.
-        let attempts = 0
-        const interval = setInterval(() => {
-          attempts += 1
-          refreshStatus()
-          if (attempts >= 6) clearInterval(interval)
-        }, 3000)
-      },
-    })
+  const handleUpgrade = async () => {
+    setCheckoutError(null)
+    try {
+      await openPolarCheckout(email, {
+        onSuccess: () => {
+          // The webhook that flips our DB status may land a few seconds after
+          // payment confirms, so poll status a handful of times to catch up.
+          let attempts = 0
+          const interval = setInterval(() => {
+            attempts += 1
+            refreshStatus()
+            if (attempts >= 6) clearInterval(interval)
+          }, 3000)
+        },
+      })
+    } catch (err) {
+      setCheckoutError(err.message)
+    }
   }
 
   if (!email) {
@@ -79,6 +81,7 @@ export default function AccountBar({ session }) {
         Sign out
       </button>
       <span className="text-xs text-gray-300 hidden sm:inline">· {status}</span>
+      {checkoutError && <span className="text-xs text-red-500">{checkoutError}</span>}
     </div>
   )
 }
