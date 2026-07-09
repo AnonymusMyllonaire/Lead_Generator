@@ -1,28 +1,56 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import SearchForm from './components/SearchForm'
 import StatsCards from './components/StatsCards'
 import ResultsTable from './components/ResultsTable'
+import AccountBar from './components/AccountBar'
+import PaywallOverlay from './components/PaywallOverlay'
+import useSession from './hooks/useSession'
 
 export default function App() {
   const [leads, setLeads] = useState([])
+  const [total, setTotal] = useState(0)
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [searchParams, setSearchParams] = useState(null)
+  const [subscribed, setSubscribed] = useState(false)
+  const [lockedCount, setLockedCount] = useState(0)
 
   const API_BASE = import.meta.env.VITE_API_URL || ''
+  const session = useSession()
+
+  // If the user just returned from Polar checkout, poll status briefly —
+  // the webhook confirming payment may land a few seconds after redirect.
+  const pollingRef = useRef(false)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('checkout') !== 'success' || pollingRef.current) return
+    pollingRef.current = true
+    let attempts = 0
+    const interval = setInterval(() => {
+      attempts += 1
+      session.refreshStatus()
+      if (attempts >= 6) clearInterval(interval)
+    }, 3000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSearch = async ({ city, country, minScore }) => {
     setIsLoading(true)
     setError(null)
     setLeads([])
+    setTotal(0)
     setStats(null)
     setSearchParams({ city, country, minScore })
 
     try {
       const res = await fetch(`${API_BASE}/api/scrape`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}),
+        },
         body: JSON.stringify({ city, country, min_score: minScore }),
       })
       if (!res.ok) {
@@ -31,7 +59,10 @@ export default function App() {
       }
       const data = await res.json()
       setLeads(data.leads)
+      setTotal(data.total)
       setStats(data.stats)
+      setSubscribed(Boolean(data.subscribed))
+      setLockedCount(data.locked_count || 0)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -52,6 +83,9 @@ export default function App() {
           <div>
             <h1 className="text-lg font-semibold text-gray-900 leading-tight">Lead Generator</h1>
             <p className="text-xs text-gray-400">Offline Clinic Discovery via OpenStreetMap</p>
+          </div>
+          <div className="ml-auto">
+            <AccountBar session={session} />
           </div>
         </div>
       </header>
@@ -87,23 +121,26 @@ export default function App() {
           </div>
         )}
 
-        {!isLoading && leads.length > 0 && stats && (
+        {!isLoading && total > 0 && stats && (
           <>
             <StatsCards
-              total={leads.length}
+              total={total}
               stats={stats}
               city={searchParams?.city}
               country={searchParams?.country}
             />
-            <ResultsTable
-              leads={leads}
-              city={searchParams?.city}
-              country={searchParams?.country}
-            />
+            <PaywallOverlay subscribed={subscribed} lockedCount={lockedCount} email={session.email}>
+              <ResultsTable
+                leads={leads}
+                city={searchParams?.city}
+                country={searchParams?.country}
+                subscribed={subscribed}
+              />
+            </PaywallOverlay>
           </>
         )}
 
-        {!isLoading && !error && stats !== null && leads.length === 0 && (
+        {!isLoading && !error && stats !== null && total === 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-14 text-center">
             <p className="text-gray-500 font-medium">No offline clinics found</p>
             <p className="text-sm text-gray-400 mt-1">

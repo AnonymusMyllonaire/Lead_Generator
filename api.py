@@ -5,18 +5,26 @@ import csv
 import io
 import logging
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+import db
+from auth import get_current_email_optional
 from offline_clinics_engine import (
     DataAcquisitionError,
     acquire_offline_clinics,
     configure_logging,
 )
+from routers import billing
 
 configure_logging()
+db.init_db()
+
+# Unsubscribed callers only get a preview of the results; full data still gets
+# computed so stats/counts stay accurate, but leads beyond this are withheld.
+PREVIEW_LEAD_COUNT = 5
 
 app = FastAPI(title="Lead Generator API", version="1.0.0")
 
@@ -26,6 +34,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(billing.router)
 
 
 class ScrapeRequest(BaseModel):
@@ -47,11 +57,22 @@ def _compute_stats(rows: list) -> dict:
 
 
 @app.post("/api/scrape")
-def scrape(request: ScrapeRequest):
+def scrape(request: ScrapeRequest, current_email: str | None = Depends(get_current_email_optional)):
     try:
         rows = acquire_offline_clinics(request.city, request.country)
         rows = [r for r in rows if int(r.get("Offline Score", 0)) >= request.min_score]
-        return {"leads": rows, "total": len(rows), "stats": _compute_stats(rows)}
+        subscribed = db.is_subscribed(current_email)
+        stats = _compute_stats(rows)
+        if subscribed:
+            return {"leads": rows, "total": len(rows), "stats": stats, "subscribed": True, "locked_count": 0}
+        preview = rows[:PREVIEW_LEAD_COUNT]
+        return {
+            "leads": preview,
+            "total": len(rows),
+            "stats": stats,
+            "subscribed": False,
+            "locked_count": max(0, len(rows) - len(preview)),
+        }
     except DataAcquisitionError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -60,8 +81,10 @@ def scrape(request: ScrapeRequest):
 
 
 @app.post("/api/download")
-def download(request: ScrapeRequest):
+def download(request: ScrapeRequest, current_email: str | None = Depends(get_current_email_optional)):
     """Re-run the scrape and return results as a CSV file download."""
+    if not db.is_subscribed(current_email):
+        raise HTTPException(status_code=402, detail="Subscription required to download full results")
     try:
         rows = acquire_offline_clinics(request.city, request.country)
         rows = [r for r in rows if int(r.get("Offline Score", 0)) >= request.min_score]

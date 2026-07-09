@@ -52,7 +52,7 @@ function downloadCSV(rows, city) {
   URL.revokeObjectURL(url)
 }
 
-export default function ResultsTable({ leads, city }) {
+export default function ResultsTable({ leads, city, subscribed = true }) {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [tierFilter, setTierFilter] = useState('All')
@@ -160,9 +160,12 @@ export default function ResultsTable({ leads, city }) {
 
         {/* CSV download */}
         <button
-          onClick={() => downloadCSV(sorted, city)}
+          onClick={() => subscribed && downloadCSV(sorted, city)}
+          disabled={!subscribed}
+          title={subscribed ? undefined : 'Subscribe to unlock full results before downloading'}
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm
-            font-medium rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors"
+            font-medium rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors
+            disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}

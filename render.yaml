@@ -7,3 +7,9 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: JWT_SECRET
+        sync: false
+      - key: POLAR_WEBHOOK_SECRET
+        sync: false
+      - key: DATABASE_PATH
+        value: "./data/subscribers.db"

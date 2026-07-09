@@ -8,6 +8,10 @@ env/
 dist/
 *.csv
 
+# Local SQLite subscriber DB
+data/
+*.db
+
 # Environment
 .env
 *.env.local
