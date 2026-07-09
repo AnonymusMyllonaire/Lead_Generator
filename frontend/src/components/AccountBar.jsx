@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { openPolarCheckout } from '../lib/polarCheckout'
 
 const CHECKOUT_URL = import.meta.env.VITE_POLAR_CHECKOUT_URL || ''
 
 export default function AccountBar({ session }) {
-  const { email, status, subscribed, isLoading, error, login, logout } = session
+  const { email, status, subscribed, isLoading, error, login, logout, refreshStatus } = session
   const [inputEmail, setInputEmail] = useState('')
 
   const handleSubmit = async (e) => {
@@ -16,9 +17,22 @@ export default function AccountBar({ session }) {
     }
   }
 
-  const checkoutHref = CHECKOUT_URL
-    ? `${CHECKOUT_URL}?customer_email=${encodeURIComponent(email || inputEmail)}`
-    : '#'
+  const handleUpgrade = () => {
+    if (!CHECKOUT_URL) return
+    const checkoutHref = `${CHECKOUT_URL}?customer_email=${encodeURIComponent(email)}`
+    openPolarCheckout(checkoutHref, {
+      onSuccess: () => {
+        // The webhook that flips our DB status may land a few seconds after
+        // payment confirms, so poll status a handful of times to catch up.
+        let attempts = 0
+        const interval = setInterval(() => {
+          attempts += 1
+          refreshStatus()
+          if (attempts >= 6) clearInterval(interval)
+        }, 3000)
+      },
+    })
+  }
 
   if (!email) {
     return (
@@ -53,15 +67,13 @@ export default function AccountBar({ session }) {
           Active
         </span>
       ) : (
-        <a
-          href={checkoutHref}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          onClick={handleUpgrade}
           className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg
             hover:bg-emerald-700 transition-colors whitespace-nowrap"
         >
           Upgrade
-        </a>
+        </button>
       )}
       <button onClick={logout} className="text-xs text-gray-400 hover:text-gray-700 underline">
         Sign out

@@ -19,22 +19,16 @@ export default function App() {
   const API_BASE = import.meta.env.VITE_API_URL || ''
   const session = useSession()
 
-  // If the user just returned from Polar checkout, poll status briefly —
-  // the webhook confirming payment may land a few seconds after redirect.
-  const pollingRef = useRef(false)
+  // Once the account flips to subscribed (after a successful checkout), re-run
+  // the last search so the preview unlocks without the user resubmitting it.
+  const wasSubscribed = useRef(session.subscribed)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('checkout') !== 'success' || pollingRef.current) return
-    pollingRef.current = true
-    let attempts = 0
-    const interval = setInterval(() => {
-      attempts += 1
-      session.refreshStatus()
-      if (attempts >= 6) clearInterval(interval)
-    }, 3000)
-    return () => clearInterval(interval)
+    if (session.subscribed && !wasSubscribed.current && searchParams && lockedCount > 0) {
+      handleSearch(searchParams)
+    }
+    wasSubscribed.current = session.subscribed
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [session.subscribed])
 
   const handleSearch = async ({ city, country, minScore }) => {
     setIsLoading(true)
@@ -129,7 +123,12 @@ export default function App() {
               city={searchParams?.city}
               country={searchParams?.country}
             />
-            <PaywallOverlay subscribed={subscribed} lockedCount={lockedCount} email={session.email}>
+            <PaywallOverlay
+              subscribed={subscribed}
+              lockedCount={lockedCount}
+              email={session.email}
+              onUpgraded={session.refreshStatus}
+            >
               <ResultsTable
                 leads={leads}
                 city={searchParams?.city}

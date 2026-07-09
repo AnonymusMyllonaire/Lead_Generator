@@ -1,11 +1,24 @@
+import { openPolarCheckout } from '../lib/polarCheckout'
+
 const CHECKOUT_URL = import.meta.env.VITE_POLAR_CHECKOUT_URL || ''
 
-export default function PaywallOverlay({ subscribed, lockedCount, email, children }) {
+export default function PaywallOverlay({ subscribed, lockedCount, email, onUpgraded, children }) {
   if (subscribed || !lockedCount) return children
 
-  const checkoutHref = CHECKOUT_URL
-    ? `${CHECKOUT_URL}${email ? `?customer_email=${encodeURIComponent(email)}` : ''}`
-    : '#'
+  const handleUnlock = () => {
+    if (!CHECKOUT_URL) return
+    const checkoutHref = `${CHECKOUT_URL}${email ? `?customer_email=${encodeURIComponent(email)}` : ''}`
+    openPolarCheckout(checkoutHref, {
+      onSuccess: () => {
+        let attempts = 0
+        const interval = setInterval(() => {
+          attempts += 1
+          onUpgraded?.()
+          if (attempts >= 6) clearInterval(interval)
+        }, 3000)
+      },
+    })
+  }
 
   return (
     <div className="relative">
@@ -20,15 +33,13 @@ export default function PaywallOverlay({ subscribed, lockedCount, email, childre
           <p className="text-sm text-gray-500 mt-1 mb-4">
             Subscribe to unlock the full list and CSV export.
           </p>
-          <a
-            href={checkoutHref}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            onClick={handleUnlock}
             className="inline-block px-5 py-2 bg-emerald-600 text-white text-sm font-medium
               rounded-lg hover:bg-emerald-700 transition-colors"
           >
             Unlock full results
-          </a>
+          </button>
         </div>
       </div>
     </div>
