@@ -16,6 +16,6 @@ services:
       - key: POLAR_PRODUCT_ID
         sync: false
       - key: POLAR_ENVIRONMENT
-        value: "sandbox"
+        sync: false
       - key: DATABASE_PATH
         value: "./data/subscribers.db"
